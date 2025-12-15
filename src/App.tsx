@@ -19,6 +19,9 @@ import AdvisoryClass from "./pages/teacher/AdvisoryClass";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
+// dev routes
+import TestSupabase from "@/components/dev/TestSupabase";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -43,6 +46,9 @@ const App = () => (
             <Route path="/teacher/advisory" element={<AdvisoryClass />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<NotFound />} />
+            
+            {/* supabase test route */}
+            <Route path="/dev/test-supabase" element={<TestSupabase />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
