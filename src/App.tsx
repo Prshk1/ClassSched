@@ -8,9 +8,11 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/admin/Dashboard";
 import ScheduleBuilder from "./pages/admin/ScheduleBuilder";
 import ManageTeachers from "./pages/admin/ManageTeachers";
+import ManageAdministrators from "./pages/admin/ManageAdministrators";
 import ManageSubjects from "./pages/admin/ManageSubjects";
 import ManageRooms from "./pages/admin/ManageRooms";
 import ManageSections from "./pages/admin/ManageSections";
+import ViewSchedules from "./pages/admin/ViewSchedules";
 import Reports from "./pages/admin/Reports";
 import TeacherSchedule from "./pages/teacher/TeacherSchedule";
 import AdvisoryClass from "./pages/teacher/AdvisoryClass";
@@ -31,9 +33,11 @@ const App = () => (
             <Route path="/admin/dashboard" element={<Dashboard />} />
             <Route path="/admin/schedule-builder" element={<ScheduleBuilder />} />
             <Route path="/admin/teachers" element={<ManageTeachers />} />
+            <Route path="/admin/administrators" element={<ManageAdministrators />} />
             <Route path="/admin/subjects" element={<ManageSubjects />} />
             <Route path="/admin/rooms" element={<ManageRooms />} />
             <Route path="/admin/sections" element={<ManageSections />} />
+            <Route path="/admin/viewschedules" element={<ViewSchedules />} />
             <Route path="/admin/reports" element={<Reports />} />
             <Route path="/teacher/schedule" element={<TeacherSchedule />} />
             <Route path="/teacher/advisory" element={<AdvisoryClass />} />

@@ -1,7 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, School, BookOpen, AlertTriangle, Calendar, FileText, Plus } from "lucide-react";
+import { Users, School, BookOpen, Calendar, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
@@ -31,14 +31,6 @@ const Dashboard = () => {
       description: "Active sections",
       color: "text-primary",
       bgColor: "bg-primary/10",
-    },
-    {
-      title: "Conflicts Detected",
-      value: "3",
-      icon: AlertTriangle,
-      description: "Scheduling issues",
-      color: "text-destructive",
-      bgColor: "bg-destructive/10",
     },
   ];
 
@@ -74,10 +66,9 @@ const Dashboard = () => {
   ];
 
   const recentActivities = [
-    { action: "Schedule updated", details: "Grade 11 - STEM 1", time: "2 hours ago" },
-    { action: "New teacher added", details: "John Smith - Mathematics", time: "5 hours ago" },
-    { action: "Room assigned", details: "Room 301 - Computer Laboratory", time: "1 day ago" },
-    { action: "Schedule conflict resolved", details: "Grade 12 - ABM 2", time: "2 days ago" },
+    { action: "Schedule updated", details: "Grade 11 - ICT 11", time: "2 hours ago" },
+    { action: "New teacher added", details: "Joy Siocon - Mathematics", time: "5 hours ago" },
+    { action: "Room assigned", details: "Computer Lab 1 - Computer Laboratory", time: "1 day ago" },
   ];
 
   return (
@@ -90,11 +81,13 @@ const Dashboard = () => {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Stats: use 3 columns on large screens so the three boxes occupy the space evenly */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {stats.map((stat) => {
             const Icon = stat.icon;
             return (
-              <Card key={stat.title} className="hover:shadow-md transition-shadow">
+              // make each card full height so cards in the row align and expand to occupy vertical space consistently
+              <Card key={stat.title} className="hover:shadow-md transition-shadow h-full">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     {stat.title}
@@ -103,11 +96,14 @@ const Dashboard = () => {
                     <Icon className={`h-5 w-5 ${stat.color}`} />
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{stat.value}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {stat.description}
-                  </p>
+                {/* make CardContent stretch so numeric area centers and cards match height */}
+                <CardContent className="flex flex-col justify-between">
+                  <div>
+                    <div className="text-3xl font-bold">{stat.value}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stat.description}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             );

@@ -2,7 +2,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Download, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useMemo, useState, useRef, useEffect } from "react";
 
@@ -32,7 +32,7 @@ const initialSubjects: Subject[] = [
   {
     id: 1,
     code: "SHS-MATH-101",
-    name: "Mathematics in the Modern World [MH 113]",
+    name: "Mathematics [MATH 113]",
     units: 3,
     type: "Core",
     departments: ["HUMSS", "ABM", "ICT"],
@@ -42,8 +42,8 @@ const initialSubjects: Subject[] = [
   },
   {
     id: 2,
-    code: "SHS-SELF-113",
-    name: "Understanding the Self [SELF 113]",
+    code: "SHS-ENG-113",
+    name: "English [ENG 113]",
     units: 3,
     type: "Core",
     departments: ["HUMSS", "HE"],
@@ -53,8 +53,8 @@ const initialSubjects: Subject[] = [
   },
   {
     id: 3,
-    code: "SHS-VGD-101",
-    name: "Visual Graphics and Design",
+    code: "SHS-FIL-101",
+    name: "Filipino [FIL 101]",
     units: 3,
     type: "Specialized",
     departments: ["ICT"],
@@ -66,8 +66,8 @@ const initialSubjects: Subject[] = [
   // TESDA-based college examples (yearLevels use First/Second/Third Year)
   {
     id: 101,
-    code: "TESDA-HVAC-101",
-    name: "HVAC Basic Principles",
+    code: "TESDA-MMW-101",
+    name: "Mathematics in the Modern World",
     units: 3,
     type: "Major",
     departments: ["HRMT"],
@@ -77,8 +77,8 @@ const initialSubjects: Subject[] = [
   },
   {
     id: 102,
-    code: "TESDA-WELD-101",
-    name: "Welding Fundamentals",
+    code: "TESDA-UTS-101",
+    name: "Understanding the Self",
     units: 4,
     type: "Major",
     departments: ["TTMT"],
@@ -88,8 +88,8 @@ const initialSubjects: Subject[] = [
   },
   {
     id: 103,
-    code: "TESDA-IT-101",
-    name: "Basic Computer Servicing",
+    code: "TESDA-VGD-101",
+    name: "Visual Graphics and Design",
     units: 3,
     type: "Major",
     departments: ["IT"],
@@ -100,6 +100,8 @@ const initialSubjects: Subject[] = [
 ];
 
 const pageSizeOptions = [10, 25, 50];
+
+const SUBJECTS_CSV_HEADER = ["id", "code", "name", "units", "type", "departments", "yearLevels", "semester", "program"];
 
 const ManageSubjects = () => {
   // UI / search
@@ -322,6 +324,220 @@ const ManageSubjects = () => {
     setSubjects((prev) => prev.filter((s) => s.id !== id));
   };
 
+  // --------------- IMPORT / EXPORT IMPLEMENTATION ---------------
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  const escapeCsv = (v: any) => {
+    if (v == null) return "";
+    const s = String(v);
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+
+  const exportCSV = (programFilter?: Program | "ALL") => {
+    const source = programFilter && programFilter !== "ALL" ? subjects.filter((s) => s.program === programFilter) : subjects;
+    const rows = [SUBJECTS_CSV_HEADER.join(",")];
+    for (const s of source) {
+      rows.push(
+        [
+          escapeCsv(s.id),
+          escapeCsv(s.code ?? ""),
+          escapeCsv(s.name),
+          escapeCsv(s.units ?? 0),
+          escapeCsv(s.type ?? ""),
+          escapeCsv((s.departments ?? []).join("|")), // use pipe inside cell to keep commas available
+          escapeCsv((s.yearLevels ?? []).join("|")),
+          escapeCsv(s.semester ?? ""),
+          escapeCsv(s.program),
+        ].join(",")
+      );
+    }
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `subjects${programFilter && programFilter !== "ALL" ? `-${programFilter.toLowerCase()}` : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = async (programFilter?: Program | "ALL") => {
+    try {
+      const mod = await import("xlsx");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const XLSX: any = mod && (mod.default ?? mod);
+      const source = programFilter && programFilter !== "ALL" ? subjects.filter((s) => s.program === programFilter) : subjects;
+      const wsData = [
+        SUBJECTS_CSV_HEADER,
+        ...source.map((s) => [
+          s.id,
+          s.code ?? "",
+          s.name,
+          s.units ?? 0,
+          s.type ?? "",
+          (s.departments ?? []).join("|"),
+          (s.yearLevels ?? []).join("|"),
+          s.semester ?? "",
+          s.program,
+        ]),
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Subjects");
+      const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([buf], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `subjects${programFilter && programFilter !== "ALL" ? `-${programFilter.toLowerCase()}` : ""}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      exportCSV(programFilter);
+    }
+  };
+
+  // CSV parser (robust, handles quoted fields) - same logic used in sections example
+  const parseCSVText = (text: string) => {
+    const rows: string[][] = [];
+    let i = 0;
+    let field = "";
+    let row: string[] = [];
+    let inQuotes = false;
+    while (i < text.length) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (i + 1 < text.length && text[i + 1] === '"') {
+            field += '"';
+            i += 2;
+            continue;
+          } else {
+            inQuotes = false;
+            i++;
+            continue;
+          }
+        } else {
+          field += ch;
+          i++;
+          continue;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+          i++;
+          continue;
+        }
+        if (ch === ",") {
+          row.push(field);
+          field = "";
+          i++;
+          continue;
+        }
+        if (ch === "\r") {
+          i++;
+          continue;
+        }
+        if (ch === "\n") {
+          row.push(field);
+          rows.push(row);
+          row = [];
+          field = "";
+          i++;
+          continue;
+        }
+        field += ch;
+        i++;
+      }
+    }
+    if (field !== "" || row.length > 0) {
+      row.push(field);
+      rows.push(row);
+    }
+    return rows;
+  };
+
+  const normalizeImported = (raw: Record<string, string>): Subject => {
+    const id = raw["id"] ? Number(raw["id"]) : Date.now() + Math.floor(Math.random() * 1000);
+    const departments = raw["departments"] ? String(raw["departments"]).split("|").map((d) => d.trim()).filter(Boolean) : [];
+    const yearLevels = raw["yearLevels"] ? String(raw["yearLevels"]).split("|").map((y) => y.trim()).filter(Boolean) : [];
+    const program = raw["program"] && String(raw["program"]).toUpperCase() === "TESDA" ? "TESDA" : "SHS";
+    return {
+      id,
+      code: raw["code"]?.trim() || undefined,
+      name: raw["name"]?.trim() || "",
+      units: raw["units"] ? Number(raw["units"]) : 0,
+      type: (raw["type"] as Subject["type"]) || undefined,
+      departments,
+      yearLevels,
+      semester: (raw["semester"] as Subject["semester"]) || "All",
+      program,
+    };
+  };
+
+  const mergeImported = (imported: Subject[]) => {
+    setSubjects((prev) => {
+      const map = new Map(prev.map((s) => [s.id, s]));
+      const result = [...prev];
+      for (const it of imported) {
+        if (map.has(it.id)) {
+          const idx = result.findIndex((s) => s.id === it.id);
+          if (idx >= 0) result[idx] = it;
+        } else {
+          result.unshift(it);
+        }
+      }
+      return result;
+    });
+    setActiveTab("SHS");
+    setPageSHS(1);
+    setPageTESDA(1);
+  };
+
+  const handleImportFile = async (file: File | null) => {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+      try {
+        const mod = await import("xlsx");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const XLSX: any = mod && (mod.default ?? mod);
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const jsonRows = (XLSX.utils.sheet_to_json as any)(ws, { defval: "" }) as Record<string, any>[];
+        const imported = jsonRows.map((row) => {
+          const raw: Record<string, string> = {};
+          for (const k of Object.keys(row)) raw[String(k).trim()] = String(row[k] ?? "");
+          return normalizeImported(raw);
+        });
+        mergeImported(imported);
+      } catch {
+        alert("Unable to parse Excel file. Try CSV.");
+      }
+    } else {
+      const text = await file.text();
+      const rows = parseCSVText(text);
+      if (rows.length === 0) {
+        alert("Empty or invalid CSV file.");
+        return;
+      }
+      const header = rows[0].map((h) => h.trim());
+      const dataRows = rows.slice(1);
+      const imported = dataRows.map((r) => {
+        const raw: Record<string, string> = {};
+        for (let i = 0; i < header.length; i++) raw[header[i]] = r[i] ?? "";
+        return normalizeImported(raw);
+      });
+      mergeImported(imported);
+    }
+    if (importInputRef.current) importInputRef.current.value = "";
+  };
+
+  const onImportClick = () => importInputRef.current?.click();
+
   // render table for a program (uses its own pagination)
   const renderProgramTable = (program: Program) => {
     const list = filteredForProgram(program);
@@ -374,7 +590,7 @@ const ManageSubjects = () => {
                         <div className="flex items-center justify-end gap-3">
                           <button
                             aria-label="edit-subject"
-                            onClick={() => openEditModalsafe(s)}
+                            onClick={() => openEditModal(s)}
                             className="p-2 rounded-lg border border-muted/60 hover:border-primary/80 transition-colors"
                             title="Edit subject"
                           >
@@ -467,17 +683,11 @@ const ManageSubjects = () => {
     );
   };
 
-  // small helper to open edit modal with safety (ensures lists set)
-  const openEditModalsafe = (s: Subject) => {
-    openEditModal(s);
-    // ensure the form lists are correctly set (openEditModal already sets them)
-  };
-
   // UI
   return (
     <DashboardLayout userRole="admin">
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold mb-2">Manage Subjects</h1>
             <p className="text-muted-foreground">Separate pages for Senior High (SHS) and TESDA-based programs. Use filters to narrow the list.</p>
@@ -487,6 +697,23 @@ const ManageSubjects = () => {
             <Button onClick={() => openAddModal(activeTab)}>
               <Plus className="h-4 w-4 mr-2" />
               Add New Subject
+            </Button>
+
+            <input ref={importInputRef} type="file" accept=".csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(e) => handleImportFile(e.target.files ? e.target.files[0] : null)} style={{ display: "none" }} />
+
+            <Button variant="ghost" onClick={() => onImportClick()} className="whitespace-nowrap">
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+
+            <Button variant="ghost" onClick={() => exportCSV("ALL")} className="whitespace-nowrap">
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+
+            <Button variant="ghost" onClick={() => exportExcel("ALL")} className="whitespace-nowrap">
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
             </Button>
           </div>
         </div>

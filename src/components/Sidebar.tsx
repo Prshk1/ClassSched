@@ -6,7 +6,8 @@ import {
   Users,
   BookOpen,
   School,
-  FileText,
+  CalendarCheck,
+  BarChart,
   UserCircle,
   LogOut,
   ChevronLeft,
@@ -23,6 +24,35 @@ interface SidebarProps {
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
 }
+
+// Inline teaching icon used for "Manage Sections"
+const TeachingIcon = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+    {...props}
+  >
+    <circle cx="4.5" cy="4.5" r="1.6" />
+    <path d="M4.5 6.5v2.5c0 .6.5 1 1 1h2" />
+    <path d="M7.5 8.5l2.2-1.2" />
+    <rect x="10" y="2.3" width="11" height="7.4" rx="0.6" />
+    <path d="M13.2 6.2v2.5" />
+    <path d="M15.3 5.2v3.5" />
+    <path d="M17.8 6.8v2.0" />
+    <circle cx="6.2" cy="16.5" r="1" />
+    <circle cx="10.5" cy="16.5" r="1" />
+    <circle cx="14.8" cy="16.5" r="1" />
+    <path d="M5.2 18.2c0 .6.8 1.1 1.6 1.1h.8c.8 0 1.6-.5 1.6-1.1" />
+    <path d="M9.5 18.2c0 .6.8 1.1 1.6 1.1h.8c.8 0 1.6-.5 1.6-1.1" />
+    <path d="M13.8 18.2c0 .6.8 1.1 1.6 1.1h.8c.8 0 1.6-.5 1.6-1.1" />
+  </svg>
+);
 
 const Sidebar = ({ userRole, collapsed, setCollapsed }: SidebarProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -45,11 +75,13 @@ const Sidebar = ({ userRole, collapsed, setCollapsed }: SidebarProps) => {
   const adminLinks = [
     { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/admin/schedule-builder", label: "Schedule Builder", icon: Calendar },
+    { to: "/admin/administrators", label: "Manage Administrators", icon: UserCircle },
     { to: "/admin/teachers", label: "Manage Teachers", icon: Users },
+    { to: "/admin/sections", label: "Manage Sections", icon: TeachingIcon as any },
     { to: "/admin/subjects", label: "Manage Subjects", icon: BookOpen },
     { to: "/admin/rooms", label: "Manage Rooms", icon: School },
-    { to: "/admin/sections", label: "Manage Sections", icon: Users }, // added Manage Sections
-    { to: "/admin/reports", label: "Reports", icon: FileText },
+    { to: "/admin/viewschedules", label: "View Schedule", icon: CalendarCheck },
+    { to: "/admin/reports", label: "Reports", icon: BarChart },
   ];
 
   const teacherLinks = [

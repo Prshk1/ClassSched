@@ -1,10 +1,9 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, Download } from "lucide-react";
+import { Calendar, Download } from "lucide-react";
 import { timeSlotsSHS, formatTimeSlot } from "@/lib/timeUtils";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 
 const TeacherSchedule = () => {
@@ -20,26 +19,35 @@ const TeacherSchedule = () => {
     "Friday-1:00 PM": { subject: "Statistics", class: "Grade 12 - ABM 2", room: "Room 203" },
   };
 
-  // Complete weekly schedule for advisory section (Grade 11 - STEM 1)
-  const advisoryClassSchedule = {
-    "Monday-7:45 AM": { subject: "Homeroom", teacher: "Dr. Smith (You)", room: "Room 201" },
-    "Monday-8:30 AM": { subject: "Mathematics", teacher: "Dr. Smith (You)", room: "Room 201" },
-    "Monday-10:00 AM": { subject: "English", teacher: "Ms. Johnson", room: "Room 103" },
-    "Monday-1:00 PM": { subject: "Science", teacher: "Mr. Brown", room: "Lab 1" },
-    "Tuesday-9:15 AM": { subject: "History", teacher: "Mrs. Davis", room: "Room 205" },
-    "Tuesday-10:45 AM": { subject: "Physical Education", teacher: "Coach Williams", room: "Gym" },
-    "Wednesday-8:30 AM": { subject: "Mathematics", teacher: "Dr. Smith (You)", room: "Room 201" },
-    "Wednesday-1:45 PM": { subject: "Arts", teacher: "Ms. Garcia", room: "Art Room" },
-    "Thursday-10:00 AM": { subject: "Science", teacher: "Mr. Brown", room: "Lab 1" },
-    "Thursday-10:45 AM": { subject: "Mathematics", teacher: "Dr. Smith (You)", room: "Room 201" },
-    "Thursday-1:00 PM": { subject: "Computer Science", teacher: "Mr. Taylor", room: "Computer Lab" },
-    "Friday-9:15 AM": { subject: "English", teacher: "Ms. Johnson", room: "Room 103" },
-    "Friday-11:30 AM": { subject: "Filipino", teacher: "Ms. Santos", room: "Room 104" },
-  };
-
   // ref to the printable area
   const printableRef = useRef<HTMLDivElement | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // view selection: "all" | "shs" | "tesda"
+  const [view, setView] = useState<"all" | "shs" | "tesda">("all");
+
+  // helper to detect SHS class by class string (simple heuristic)
+  const isShsClass = (className?: string) => {
+    if (!className) return false;
+    return /\bGrade\s*\d+/i.test(className);
+  };
+
+  // produce a filtered map of schedule entries according to view
+  const visibleSchedule = useMemo(() => {
+    const map = new Map<string, { subject: string; class: string; room: string }>();
+    for (const k of Object.keys(mySchedule)) {
+      const ev = (mySchedule as any)[k] as { subject: string; class: string; room: string };
+      if (view === "all") {
+        map.set(k, ev);
+      } else if (view === "shs") {
+        if (isShsClass(ev.class)) map.set(k, ev);
+      } else {
+        // tesda view: include those that are not SHS by heuristic
+        if (!isShsClass(ev.class)) map.set(k, ev);
+      }
+    }
+    return map;
+  }, [view, mySchedule]);
 
   // generate a PDF from the current schedule view (uses html2canvas + jspdf)
   const downloadPdf = async () => {
@@ -51,7 +59,6 @@ const TeacherSchedule = () => {
 
     setIsGenerating(true);
     try {
-      // dynamic imports (handle default and named exports)
       const html2canvasMod = await import("html2canvas");
       const html2canvas = (html2canvasMod as any).default ?? html2canvasMod;
 
@@ -62,13 +69,10 @@ const TeacherSchedule = () => {
         throw new Error("Failed to load html2canvas or jsPDF");
       }
 
-      // render the node to canvas at higher scale for better quality
-      // scale can be increased if you need higher DPI, but keep memory in mind
       const scale = 2;
       const canvas = await html2canvas(printableRef.current as HTMLElement, { scale, useCORS: true });
       const imgData = canvas.toDataURL("image/png");
 
-      // create pdf — landscape A4 tends to work well for wide tables
       const pdf = new jsPDFClass({
         orientation: "landscape",
         unit: "pt",
@@ -78,16 +82,12 @@ const TeacherSchedule = () => {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
 
-      // compute ratio to fit PDF width
       const imgWidthPx = canvas.width;
       const imgHeightPx = canvas.height;
       const ratio = pdfWidth / imgWidthPx;
       const renderedHeightPt = imgHeightPx * ratio;
-
-      // page height in canvas pixels that fits one PDF page
       const pageHeightPx = pdfHeight / ratio;
 
-      // if single page fits, just add the full image
       if (imgHeightPx <= pageHeightPx + 1) {
         const imgWidth = pdfWidth;
         const imgHeight = renderedHeightPt;
@@ -95,13 +95,11 @@ const TeacherSchedule = () => {
         const y = 10;
         pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
       } else {
-        // Multi-page: slice the canvas vertically
         let yOffsetPx = 0;
         let page = 0;
         while (yOffsetPx < imgHeightPx) {
           const sliceHeightPx = Math.min(pageHeightPx, imgHeightPx - yOffsetPx);
 
-          // create a temporary canvas for the slice
           const sliceCanvas = document.createElement("canvas");
           sliceCanvas.width = imgWidthPx;
           sliceCanvas.height = Math.floor(sliceHeightPx);
@@ -109,7 +107,6 @@ const TeacherSchedule = () => {
           const ctx = sliceCanvas.getContext("2d");
           if (!ctx) throw new Error("Unable to get canvas context for PDF slice.");
 
-          // draw the slice from the original canvas
           ctx.drawImage(
             canvas,
             0,
@@ -137,7 +134,7 @@ const TeacherSchedule = () => {
         }
       }
 
-      const filename = `schedule-${new Date().toISOString().slice(0, 10)}.pdf`;
+      const filename = `schedule-${view}-${new Date().toISOString().slice(0, 10)}.pdf`;
       pdf.save(filename);
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -153,159 +150,92 @@ const TeacherSchedule = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold mb-2">My Schedule</h1>
-          <p className="text-muted-foreground">
-            View your teaching schedule and advisory class
-          </p>
+          <p className="text-muted-foreground">View your teaching schedule</p>
         </div>
 
         <div className="flex items-center justify-between gap-4">
-          <Tabs defaultValue="teaching" className="space-y-4 flex-1">
-            <div className="flex items-center justify-between">
-              <TabsList>
-                <TabsTrigger value="teaching">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Teaching Schedule
-                </TabsTrigger>
-                <TabsTrigger value="advisory">
-                  <Clock className="h-4 w-4 mr-2" />
-                  Advisory Class
-                </TabsTrigger>
-              </TabsList>
-              <div className="ml-4">
-                <Button onClick={downloadPdf} disabled={isGenerating} className="whitespace-nowrap">
-                  <Download className="h-4 w-4 mr-2" />
-                  {isGenerating ? "Generating..." : "Download PDF"}
-                </Button>
-              </div>
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setView("all")}
+              className={`px-3 py-2 rounded ${view === "all" ? "bg-primary text-white" : "bg-card border border-border"}`}
+            >
+              All Schedule
+            </button>
+            <button
+              onClick={() => setView("shs")}
+              className={`px-3 py-2 rounded ${view === "shs" ? "bg-primary text-white" : "bg-card border border-border"}`}
+            >
+              Senior High Schedule
+            </button>
+            <button
+              onClick={() => setView("tesda")}
+              className={`px-3 py-2 rounded ${view === "tesda" ? "bg-primary text-white" : "bg-card border border-border"}`}
+            >
+              TESDA-based Schedule
+            </button>
+          </div>
 
-            <TabsContent value="teaching">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Weekly Teaching Schedule</CardTitle>
-                  <CardDescription>Your assigned classes for this week</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {/* attach printableRef to the content we want in the PDF */}
-                  <div className="overflow-x-auto" ref={printableRef}>
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr>
-                          <th className="border border-border bg-muted p-3 text-left font-semibold min-w-[100px]">
-                            Time
-                          </th>
-                          {weekDays.map((day) => (
-                            <th key={day} className="border border-border bg-muted p-3 text-center font-semibold min-w-[150px]">
-                              {day}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {timeSlots.slice(0, 9).map((timeSlot) => (
-                          <tr key={timeSlot.start}>
-                            <td className="border border-border p-3 font-medium bg-muted/50 text-sm">
-                              {formatTimeSlot(timeSlot)}
-                            </td>
-                            {weekDays.map((day) => {
-                              const slotKey = `${day}-${timeSlot.start}`;
-                              const slot = mySchedule[slotKey as keyof typeof mySchedule];
-
-                              return (
-                                <td key={day} className="border border-border p-2">
-                                  {slot ? (
-                                    <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 h-full">
-                                      <div className="font-semibold text-primary">
-                                        {slot.subject}
-                                      </div>
-                                      <div className="text-sm text-muted-foreground mt-1">
-                                        {slot.class}
-                                      </div>
-                                      <Badge variant="secondary" className="mt-2 text-xs">
-                                        {slot.room}
-                                      </Badge>
-                                    </div>
-                                  ) : (
-                                    <div className="h-full min-h-[80px] flex items-center justify-center text-muted-foreground text-sm">
-                                      Free Period
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="advisory">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Advisory Class Schedule</CardTitle>
-                  <CardDescription>Complete weekly schedule for Grade 11 - STEM 1 (Your advisory section)</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {/* Reuse the same printableRef - switch tab before download to capture advisory */}
-                  <div className="overflow-x-auto" ref={printableRef}>
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr>
-                          <th className="border border-border bg-muted p-3 text-left font-semibold min-w-[120px]">
-                            Time
-                          </th>
-                          {weekDays.map((day) => (
-                            <th key={day} className="border border-border bg-muted p-3 text-center font-semibold min-w-[150px]">
-                              {day}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {timeSlots.slice(0, 9).map((timeSlot) => (
-                          <tr key={timeSlot.start}>
-                            <td className="border border-border p-3 font-medium bg-muted/50 text-sm">
-                              {formatTimeSlot(timeSlot)}
-                            </td>
-                            {weekDays.map((day) => {
-                              const slotKey = `${day}-${timeSlot.start}`;
-                              const slot = advisoryClassSchedule[slotKey as keyof typeof advisoryClassSchedule];
-
-                              return (
-                                <td key={day} className="border border-border p-2">
-                                  {slot ? (
-                                    <div className={`${slot.teacher.includes('(You)') ? 'bg-accent/10 border-accent/20' : 'bg-primary/10 border-primary/20'} border rounded-lg p-3 h-full`}>
-                                      <div className={`font-semibold ${slot.teacher.includes('(You)') ? 'text-accent' : 'text-primary'} text-sm`}>
-                                        {slot.subject}
-                                      </div>
-                                      <div className="text-xs text-muted-foreground mt-1">
-                                        {slot.teacher}
-                                      </div>
-                                      <Badge variant="secondary" className="mt-2 text-xs">
-                                        {slot.room}
-                                      </Badge>
-                                    </div>
-                                  ) : (
-                                    <div className="h-full min-h-[80px] flex items-center justify-center text-muted-foreground text-xs">
-                                      Free Period
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          <div>
+            <Button onClick={downloadPdf} disabled={isGenerating} className="whitespace-nowrap">
+              <Download className="h-4 w-4 mr-2" />
+              {isGenerating ? "Generating..." : "Download PDF"}
+            </Button>
+          </div>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Weekly Teaching Schedule</CardTitle>
+            <CardDescription>{view === "all" ? "All assigned classes" : view === "shs" ? "Senior High assigned classes" : "TESDA-based assigned classes"}</CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            {/* attach printableRef to the content we want in the PDF */}
+            <div className="overflow-x-auto" ref={printableRef}>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border border-border bg-muted p-3 text-left font-semibold min-w-[100px]">Time</th>
+                    {weekDays.map((day) => (
+                      <th key={day} className="border border-border bg-muted p-3 text-center font-semibold min-w-[150px]">
+                        {day}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {timeSlots.slice(0, 9).map((timeSlot) => (
+                    <tr key={timeSlot.start}>
+                      <td className="border border-border p-3 font-medium bg-muted/50 text-sm">
+                        {formatTimeSlot(timeSlot)}
+                      </td>
+                      {weekDays.map((day) => {
+                        const slotKey = `${day}-${timeSlot.start}`;
+                        const slot = visibleSchedule.get(slotKey);
+
+                        return (
+                          <td key={day} className="border border-border p-2 align-top">
+                            {slot ? (
+                              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 h-full">
+                                <div className="font-semibold text-primary">{slot.subject}</div>
+                                <div className="text-sm text-muted-foreground mt-1">{slot.class}</div>
+                                <Badge variant="secondary" className="mt-2 text-xs">{slot.room}</Badge>
+                              </div>
+                            ) : (
+                              <div className="h-full min-h-[80px] flex items-center justify-center text-muted-foreground text-sm">
+                                Free Period
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

@@ -332,7 +332,7 @@ export default function ManageRooms() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold mb-0">Rooms</h1>
-            <p className="text-muted-foreground text-sm mt-1">Manage rooms and laboratories (import/export supported)</p>
+            <p className="text-muted-foreground text-sm mt-1">Manage rooms and laboratories</p>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -369,6 +369,11 @@ export default function ManageRooms() {
             <Button variant="ghost" onClick={() => exportRoomsExcel()} className="whitespace-nowrap">
               <Download className="h-4 w-4 mr-2" />
               Export Excel
+            </Button>
+
+            {/* Reset filters button */}
+            <Button variant="ghost" onClick={resetFilters} className="whitespace-nowrap">
+              Reset filters
             </Button>
           </div>
         </div>

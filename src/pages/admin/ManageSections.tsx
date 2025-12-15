@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Trash2, Download, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 type Program = "SHS" | "TESDA";
 
@@ -64,22 +64,14 @@ export default function ManageSections() {
   const [formProgram, setFormProgram] = useState<Program>("SHS");
   const [formStrandDept, setFormStrandDept] = useState("");
   const [formYearLevel, setFormYearLevel] = useState<string>(SHS_YEARS[0]);
-  const [formAdviser, setFormAdviser] = useState("");
   const [formCapacity, setFormCapacity] = useState<number>(30);
+  // NOTE: adviser field removed from modal per request — adviser remains part of Section type and stored data,
+  // but it will no longer be editable from this modal. When editing, existing adviser value is preserved.
 
   // import ref
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const totalPages = (listLength: number, pageSize: number) => Math.max(1, Math.ceil(listLength / pageSize));
-
-  // derive unique adviser suggestions from existing sections
-  const adviserSuggestions = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of sections) {
-      if (s.adviser && s.adviser.trim()) set.add(s.adviser.trim());
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [sections]);
 
   // filter logic for a program
   const filteredForProgram = (program: Program) => {
@@ -94,7 +86,6 @@ export default function ManageSections() {
       return (
         (s.name ?? "").toLowerCase().includes(q) ||
         (s.code ?? "").toLowerCase().includes(q) ||
-        (s.adviser ?? "").toLowerCase().includes(q) ||
         (s.strandOrDept ?? "").toLowerCase().includes(q)
       );
     });
@@ -105,6 +96,23 @@ export default function ManageSections() {
     return list.slice(start, start + pageSize);
   };
 
+  // helper to reset page for active tab
+  const resetPageForActiveTab = () => {
+    if (activeTab === "SHS") setPageSHS(1);
+    else setPageTESDA(1);
+  };
+
+  // reset filters function (requested)
+  const resetFilters = () => {
+    setQuery("");
+    setFilterStrandOrDept("");
+    setFilterYear("");
+    setMinCapacity("");
+    setMaxCapacity("");
+    setPageSHS(1);
+    setPageTESDA(1);
+  };
+
   // modal
   const openAddModal = (program?: Program) => {
     setEditingId(null);
@@ -113,7 +121,6 @@ export default function ManageSections() {
     setFormProgram(program ?? activeTab);
     setFormStrandDept("");
     setFormYearLevel(program === "TESDA" ? TESDA_YEARS[0] : SHS_YEARS[0]);
-    setFormAdviser("");
     setFormCapacity(30);
     setModalOpen(true);
   };
@@ -125,8 +132,8 @@ export default function ManageSections() {
     setFormProgram(s.program);
     setFormStrandDept(s.strandOrDept ?? "");
     setFormYearLevel(s.yearLevel ?? (s.program === "TESDA" ? TESDA_YEARS[0] : SHS_YEARS[0]));
-    setFormAdviser(s.adviser ?? "");
     setFormCapacity(s.capacity ?? 30);
+    // adviser intentionally not set here so it is not editable from the modal
     setModalOpen(true);
   };
 
@@ -137,6 +144,10 @@ export default function ManageSections() {
       alert("Please provide section name.");
       return;
     }
+
+    // preserve existing adviser when editing; new sections have no adviser by default
+    const existingAdviser = editingId != null ? sections.find((s) => s.id === editingId)?.adviser : undefined;
+
     const payload: Section = {
       id: editingId ?? Date.now(),
       code: formCode.trim() || undefined,
@@ -144,7 +155,7 @@ export default function ManageSections() {
       program: formProgram,
       strandOrDept: formStrandDept || undefined,
       yearLevel: formYearLevel || undefined,
-      adviser: formAdviser || undefined,
+      adviser: existingAdviser, // preserve adviser on edit; new records will have undefined adviser
       capacity: formCapacity || 0,
     };
 
@@ -397,7 +408,6 @@ export default function ManageSections() {
                       <td className="py-2 pr-3">
                         <div className="font-medium">{s.name}</div>
                         {s.code ? <div className="text-xs text-muted-foreground mt-0.5">{s.code}</div> : null}
-                        {s.adviser ? <div className="text-xs text-muted-foreground mt-0.5">Adviser: {s.adviser}</div> : null}
                       </td>
                       <td className="py-2 pr-3 text-muted-foreground align-top">{s.strandOrDept ?? "—"}</td>
                       <td className="py-2 pr-3 text-muted-foreground align-top">{s.yearLevel ?? "—"}</td>
@@ -570,6 +580,11 @@ export default function ManageSections() {
               <Download className="h-4 w-4 mr-2" />
               Export Excel
             </Button>
+
+            {/* Reset filters button */}
+            <Button variant="ghost" onClick={resetFilters} className="whitespace-nowrap">
+              Reset filters
+            </Button>
           </div>
         </div>
 
@@ -601,7 +616,7 @@ export default function ManageSections() {
         {/* Render selected tab */}
         {activeTab === "SHS" ? renderTableFor("SHS") : renderTableFor("TESDA")}
 
-        {/* Modal for Add / Edit Section */}
+        {/* Modal for Add / Edit Section (adviser removed from modal) */}
         {modalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="fixed inset-0 bg-black/50" onClick={closeModal} aria-hidden="true" />
@@ -666,24 +681,6 @@ export default function ManageSections() {
                       {(formProgram === "SHS" ? SHS_YEARS : TESDA_YEARS).map((y) => <option key={y} value={y}>{y}</option>)}
                     </select>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Adviser (optional)</label>
-                  {/* Use a datalist to provide inline suggestions from existing advisers. */}
-                  <Input
-                    value={formAdviser}
-                    onChange={(e) => setFormAdviser((e.target as HTMLInputElement).value)}
-                    placeholder="e.g. Mr. Smith"
-                    list="advisers-list"
-                    aria-autocomplete="list"
-                    aria-haspopup="true"
-                  />
-                  <datalist id="advisers-list">
-                    {adviserSuggestions.map((a) => (
-                      <option key={a} value={a} />
-                    ))}
-                  </datalist>
                 </div>
 
                 <div className="flex items-center justify-end gap-2">
