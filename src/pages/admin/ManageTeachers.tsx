@@ -165,7 +165,6 @@ const ManageTeachers = () => {
   const [formSubjects, setFormSubjects] = useState<string[]>([]);
   const [allowOtherSpecializations, setAllowOtherSpecializations] = useState(false);
   const [allowedOtherSpecs, setAllowedOtherSpecs] = useState<string[]>([]);
-  const [formStatus, setFormStatus] = useState<Teacher["status"]>("Active");
   const [formFacultyStatus, setFormFacultyStatus] = useState<Teacher["facultyStatus"]>("Full-Time");
 
   // filtering & grouping state
@@ -291,7 +290,6 @@ const ManageTeachers = () => {
     setFormSubjects([]);
     setAllowOtherSpecializations(false);
     setAllowedOtherSpecs([]);
-    setFormStatus("Active");
     setFormFacultyStatus("Full-Time");
     setFormAdvisoryInput("");
     setFormAdvisoryClasses([]);
@@ -306,7 +304,6 @@ const ManageTeachers = () => {
     setFormEmail(t.email);
     setFormSpecialization(t.specialization ?? "");
     setFormSubjects(t.subjects ?? []);
-    setFormStatus(t.status ?? "Active");
     setFormFacultyStatus(t.facultyStatus ?? "Full-Time");
     setFormAdvisoryClasses(t.advisoryClasses ?? []);
     // determine if teacher has subjects from other specializations and pre-select those specs
@@ -367,103 +364,45 @@ const ManageTeachers = () => {
       alert("Please provide name, email and at least one assigned subject.");
       return;
     }
-
-    // If editing an archived teacher, treat differently: update in archived list or restore if status changed to Active
     const isEditing = editingId != null;
     if (isEditing) {
-      // first try to update in active list
-      let updatedInActive = false;
+      // update active list if present
       setTeachers((prev) =>
-        prev.map((t) => {
-          if (t.id === editingId) {
-            updatedInActive = true;
-            const updated: Teacher = {
-              ...t,
-              schoolId: formSchoolId.trim() || undefined,
-              name: formName.trim(),
-              email: formEmail.trim(),
-              specialization: formSpecialization || undefined,
-              subjects: formSubjects,
-              status: formStatus,
-              facultyStatus: formFacultyStatus,
-              advisoryClasses: formAdvisoryClasses,
-            };
-            return updated;
-          }
-          return t;
-        })
+        prev.map((t) =>
+          t.id === editingId
+            ? {
+                ...t,
+                schoolId: formSchoolId.trim() || undefined,
+                name: formName.trim(),
+                email: formEmail.trim(),
+                specialization: formSpecialization || undefined,
+                subjects: formSubjects,
+                facultyStatus: formFacultyStatus,
+                advisoryClasses: formAdvisoryClasses,
+              }
+            : t
+        )
       );
 
-      // if not in active, update archived
-      if (!updatedInActive) {
-        setArchivedTeachers((prev) =>
-          prev.map((t) =>
-            t.id === editingId
-              ? {
-                  ...t,
-                  schoolId: formSchoolId.trim() || undefined,
-                  name: formName.trim(),
-                  email: formEmail.trim(),
-                  specialization: formSpecialization || undefined,
-                  subjects: formSubjects,
-                  status: formStatus,
-                  facultyStatus: formFacultyStatus,
-                  advisoryClasses: formAdvisoryClasses,
-                }
-              : t
-          )
-        );
-      }
-
-      // If after update status === Inactive, ensure it's archived (move from active to archived)
-      if (formStatus === "Inactive") {
-        setTeachers((prev) => {
-          const t = prev.find((x) => x.id === editingId);
-          if (!t) return prev;
-          const archived = { ...t, status: "Inactive" as Teacher["status"] };
-          setArchivedTeachers((a) => [archived, ...a]);
-          return prev.filter((x) => x.id !== editingId);
-        });
-      } else {
-        // if status became Active and teacher exists in archived, restore it
-        setArchivedTeachers((prev) => {
-          const t = prev.find((x) => x.id === editingId);
-          if (!t) return prev;
-          if (formStatus === "Active") {
-            const restored: Teacher = {
-              id: t.id,
-              schoolId: formSchoolId.trim() || undefined,
-              name: formName.trim(),
-              email: formEmail.trim(),
-              specialization: formSpecialization || undefined,
-              subjects: formSubjects,
-              status: "Active",
-              facultyStatus: formFacultyStatus,
-              advisoryClasses: formAdvisoryClasses,
-            };
-            setTeachers((a) => [restored, ...a]);
-            return prev.filter((x) => x.id !== editingId);
-          }
-          // otherwise just update archived record (inactive)
-          return prev.map((x) =>
-            x.id === editingId
-              ? {
-                  ...x,
-                  schoolId: formSchoolId.trim() || undefined,
-                  name: formName.trim(),
-                  email: formEmail.trim(),
-                  specialization: formSpecialization || undefined,
-                  subjects: formSubjects,
-                  status: formStatus,
-                  facultyStatus: formFacultyStatus,
-                  advisoryClasses: formAdvisoryClasses,
-                }
-              : x
-          );
-        });
-      }
+      // also update archived record if present (do not change status here)
+      setArchivedTeachers((prev) =>
+        prev.map((t) =>
+          t.id === editingId
+            ? {
+                ...t,
+                schoolId: formSchoolId.trim() || undefined,
+                name: formName.trim(),
+                email: formEmail.trim(),
+                specialization: formSpecialization || undefined,
+                subjects: formSubjects,
+                facultyStatus: formFacultyStatus,
+                advisoryClasses: formAdvisoryClasses,
+              }
+            : t
+        )
+      );
     } else {
-      // creating new teacher
+      // creating new teacher always defaults to Active; archiving done via Archive button
       const newTeacher: Teacher = {
         id: Date.now(),
         schoolId: formSchoolId.trim() || undefined,
@@ -471,16 +410,12 @@ const ManageTeachers = () => {
         email: formEmail.trim(),
         specialization: formSpecialization || undefined,
         subjects: formSubjects,
-        status: formStatus,
+        status: "Active",
         facultyStatus: formFacultyStatus,
         advisoryClasses: formAdvisoryClasses,
       };
 
-      if (formStatus === "Inactive") {
-        setArchivedTeachers((prev) => [newTeacher, ...prev]);
-      } else {
-        setTeachers((prev) => [newTeacher, ...prev]);
-      }
+      setTeachers((prev) => [newTeacher, ...prev]);
     }
 
     closeModal();
@@ -1192,20 +1127,12 @@ const ManageTeachers = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Faculty status</label>
                   <select value={formFacultyStatus} onChange={(e) => setFormFacultyStatus(e.target.value as Teacher["facultyStatus"])} className="w-full border rounded px-3 py-2">
                     <option value="Full-Time">Full-Time</option>
                     <option value="Part-Time">Part-Time</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Status</label>
-                  <select value={formStatus} onChange={(e) => setFormStatus(e.target.value as Teacher["status"])} className="w-full border rounded px-3 py-2">
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
                   </select>
                 </div>
               </div>

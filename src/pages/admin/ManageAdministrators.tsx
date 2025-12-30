@@ -11,7 +11,7 @@ type Administrator = {
   employeeId?: string; // e.g. "EMP-001"
   name: string;
   email: string;
-  role?: "Super Admin" | "Administrator";
+  role?: "Administrator";
   permissions: string[]; // visible permission labels
   status?: "Active" | "Inactive";
   lastLogin?: string; // ISO string (optional)
@@ -39,7 +39,7 @@ const initialAdmins: Administrator[] = [
     employeeId: "25-0001",
     name: "Christine Salve Demetillo",
     email: "csdemetillo@school.edu",
-    role: "Super Admin",
+    role: "Administrator",
     permissions: allPermissions.slice(),
     status: "Active",
     lastLogin: "2025-12-10T08:22:00Z",
@@ -100,12 +100,12 @@ const ManageAdministrators = () => {
   const [formEmail, setFormEmail] = useState("");
   const [formRole, setFormRole] = useState<Administrator["role"] | "">("");
   const [formPermissions, setFormPermissions] = useState<string[]>([]);
-  const [formStatus, setFormStatus] = useState<Administrator["status"]>("Active");
+  
 
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  // roles limited to only two
-  const roles = useMemo(() => ["Super Admin", "Administrator"] as const, []);
+  // roles (only Administrator supported)
+  const roles = useMemo(() => ["Administrator"] as const, []);
 
   // filters / grouping
   const [filterRole, setFilterRole] = useState("");
@@ -122,13 +122,10 @@ const ManageAdministrators = () => {
   }, [query, filterRole, filterStatus, viewArchives, pageSize]);
 
   // When role changes in the form:
-  // - Super Admin => all permissions checked and locked (disabled)
-  // - Administrator => defaultAdminPermissions are CHECKED by default, other permissions start unchecked but remain checkable
+  // - Administrator => defaultAdminPermissions are CHECKED by default
   // - none => leave whatever user has selected (or empty)
   useEffect(() => {
-    if (formRole === "Super Admin") {
-      setFormPermissions(allPermissions.slice());
-    } else if (formRole === "Administrator") {
+    if (formRole === "Administrator") {
       // set defaults explicitly (not preserving previous selection) as requested
       setFormPermissions(defaultAdminPermissions.slice());
     } else {
@@ -172,7 +169,6 @@ const ManageAdministrators = () => {
     setFormEmail("");
     setFormRole("");
     setFormPermissions([]); // empty until role selected
-    setFormStatus("Active");
     setModalOpen(true);
   };
 
@@ -182,9 +178,8 @@ const ManageAdministrators = () => {
     setFormName(a.name);
     setFormEmail(a.email);
     setFormRole(a.role ?? "");
-    // if editing existing admin, start with their saved permissions (Super Admin will be replaced by effect anyway)
+    // if editing existing admin, start with their saved permissions (role-specific defaults will apply)
     setFormPermissions(Array.from(new Set([...(a.permissions ?? [])])));
-    setFormStatus(a.status ?? "Active");
     setModalOpen(true);
   };
 
@@ -220,10 +215,7 @@ const ManageAdministrators = () => {
   };
 
   const togglePermissionInForm = (perm: string) => {
-    // Super Admin: locked (cannot toggle)
-    if (formRole === "Super Admin") return;
-
-    // Administrator: allow toggling any permission (defaults were set above)
+    // allow toggling permissions for Administrator or when no role selected
     setFormPermissions((prev) => (prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]));
   };
 
@@ -377,34 +369,19 @@ const ManageAdministrators = () => {
       .filter(Boolean);
     const id = raw["id"] ? Number(raw["id"]) : Date.now() + Math.floor(Math.random() * 1000);
     const twoFactor = raw["twoFactor"] === "true" || raw["twoFactor"] === "1";
-    const role = raw["role"]?.trim() === "Super Admin" ? "Super Admin" : "Administrator";
-
-    if (role === "Super Admin") {
-      return {
-        id,
-        employeeId: raw["employeeId"]?.trim() || undefined,
-        name: raw["name"]?.trim() || "",
-        email: raw["email"]?.trim() || "",
-        role,
-        permissions: allPermissions.slice(),
-        status: raw["status"] === "Inactive" ? "Inactive" : "Active",
-        lastLogin: raw["lastLogin"]?.trim() || undefined,
-        twoFactor,
-      } as Administrator;
-    } else {
-      const chosen = permissions.length > 0 ? permissions : defaultAdminPermissions.slice();
-      return {
-        id,
-        employeeId: raw["employeeId"]?.trim() || undefined,
-        name: raw["name"]?.trim() || "",
-        email: raw["email"]?.trim() || "",
-        role,
-        permissions: Array.from(new Set(chosen)),
-        status: raw["status"] === "Inactive" ? "Inactive" : "Active",
-        lastLogin: raw["lastLogin"]?.trim() || undefined,
-        twoFactor,
-      } as Administrator;
-    }
+    // Map imported roles to Administrator (only Administrator supported)
+    const chosen = permissions.length > 0 ? permissions : defaultAdminPermissions.slice();
+    return {
+      id,
+      employeeId: raw["employeeId"]?.trim() || undefined,
+      name: raw["name"]?.trim() || "",
+      email: raw["email"]?.trim() || "",
+      role: "Administrator",
+      permissions: Array.from(new Set(chosen)),
+      status: raw["status"] === "Inactive" ? "Inactive" : "Active",
+      lastLogin: raw["lastLogin"]?.trim() || undefined,
+      twoFactor,
+    } as Administrator;
   };
 
   const handleImportFile = async (file: File | null) => {
@@ -498,9 +475,7 @@ const ManageAdministrators = () => {
     }
 
     let finalPermissions: string[] = [];
-    if (formRole === "Super Admin") {
-      finalPermissions = allPermissions.slice();
-    } else if (formRole === "Administrator") {
+    if (formRole === "Administrator") {
       finalPermissions = formPermissions.length > 0 ? Array.from(new Set(formPermissions)) : defaultAdminPermissions.slice();
     } else {
       finalPermissions = Array.from(new Set(formPermissions));
@@ -508,84 +483,35 @@ const ManageAdministrators = () => {
 
     const isEditing = editingId != null;
     if (isEditing) {
-      let updatedInActive = false;
       setAdmins((prev) =>
-        prev.map((a) => {
-          if (a.id === editingId) {
-            updatedInActive = true;
-            const updated: Administrator = {
-              ...a,
-              employeeId: formEmployeeId.trim() || undefined,
-              name: formName.trim(),
-              email: formEmail.trim(),
-              role: (formRole as Administrator["role"]) || undefined,
-              permissions: finalPermissions,
-              status: formStatus,
-            };
-            return updated;
-          }
-          return a;
-        })
+        prev.map((a) =>
+          a.id === editingId
+            ? {
+                ...a,
+                employeeId: formEmployeeId.trim() || undefined,
+                name: formName.trim(),
+                email: formEmail.trim(),
+                role: (formRole as Administrator["role"]) || undefined,
+                permissions: finalPermissions,
+              }
+            : a
+        )
       );
 
-      if (!updatedInActive) {
-        setArchivedAdmins((prev) =>
-          prev.map((a) =>
-            a.id === editingId
-              ? {
-                  ...a,
-                  employeeId: formEmployeeId.trim() || undefined,
-                  name: formName.trim(),
-                  email: formEmail.trim(),
-                  role: (formRole as Administrator["role"]) || undefined,
-                  permissions: finalPermissions,
-                  status: formStatus,
-                }
-              : a
-          )
-        );
-      }
-
-      if (formStatus === "Inactive") {
-        setAdmins((prev) => {
-          const a = prev.find((x) => x.id === editingId);
-          if (!a) return prev;
-          const archived = { ...a, status: "Inactive" as Administrator["status"] };
-          setArchivedAdmins((ar) => [archived, ...ar]);
-          return prev.filter((x) => x.id !== editingId);
-        });
-      } else {
-        setArchivedAdmins((prev) => {
-          const a = prev.find((x) => x.id === editingId);
-          if (!a) return prev;
-          if (formStatus === "Active") {
-            const restored: Administrator = {
-              id: a.id,
-              employeeId: formEmployeeId.trim() || undefined,
-              name: formName.trim(),
-              email: formEmail.trim(),
-              role: (formRole as Administrator["role"]) || undefined,
-              permissions: finalPermissions,
-              status: "Active",
-            };
-            setAdmins((ar) => [restored, ...ar]);
-            return prev.filter((x) => x.id !== editingId);
-          }
-          return prev.map((x) =>
-            x.id === editingId
-              ? {
-                  ...x,
-                  employeeId: formEmployeeId.trim() || undefined,
-                  name: formName.trim(),
-                  email: formEmail.trim(),
-                  role: (formRole as Administrator["role"]) || undefined,
-                  permissions: finalPermissions,
-                  status: formStatus,
-                }
-              : x
-          );
-        });
-      }
+      setArchivedAdmins((prev) =>
+        prev.map((a) =>
+          a.id === editingId
+            ? {
+                ...a,
+                employeeId: formEmployeeId.trim() || undefined,
+                name: formName.trim(),
+                email: formEmail.trim(),
+                role: (formRole as Administrator["role"]) || undefined,
+                permissions: finalPermissions,
+              }
+            : a
+        )
+      );
     } else {
       const newAdmin: Administrator = {
         id: Date.now(),
@@ -594,11 +520,10 @@ const ManageAdministrators = () => {
         email: formEmail.trim(),
         role: (formRole as Administrator["role"]) || undefined,
         permissions: finalPermissions,
-        status: formStatus,
+        status: "Active",
       };
 
-      if (formStatus === "Inactive") setArchivedAdmins((prev) => [newAdmin, ...prev]);
-      else setAdmins((prev) => [newAdmin, ...prev]);
+      setAdmins((prev) => [newAdmin, ...prev]);
     }
 
     closeModal();
@@ -607,7 +532,6 @@ const ManageAdministrators = () => {
   const renderRoleBadge = (role?: string) => {
     const base = "inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm";
     if (!role) return <Badge className={`${base} bg-muted text-muted-foreground`}>—</Badge>;
-    if (role === "Super Admin") return <Badge className={`${base} bg-emerald-600 text-white`}>{role}</Badge>;
     return <Badge className={`${base} bg-sky-600 text-white`}>{role}</Badge>;
   };
 
@@ -620,7 +544,7 @@ const ManageAdministrators = () => {
       <td className="py-6 pr-6 text-muted-foreground">{a.email}</td>
       <td className="py-6 pr-6">
         <div className="flex flex-wrap gap-2">
-          {a.role === "Super Admin" ? (
+          {(a.permissions ?? []).length === allPermissions.length ? (
             <Badge className="bg-emerald-600 text-white text-xs">All</Badge>
           ) : (a.permissions ?? []).length > 0 ? (
             (a.permissions ?? []).map((p) => (
@@ -857,7 +781,7 @@ const ManageAdministrators = () => {
                 <Input value={formEmail} onChange={(e) => setFormEmail(e.target.value)} placeholder="email@school.edu" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Role</label>
                   <select value={formRole} onChange={(e) => setFormRole(e.target.value as Administrator["role"] | "")} className="w-full border rounded px-3 py-2">
@@ -867,14 +791,6 @@ const ManageAdministrators = () => {
                     ))}
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Status</label>
-                  <select value={formStatus} onChange={(e) => setFormStatus(e.target.value as Administrator["status"])} className="w-full border rounded px-3 py-2">
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
               </div>
 
               <div>
@@ -882,7 +798,6 @@ const ManageAdministrators = () => {
                 <div className="grid grid-cols-2 gap-2 border rounded p-2 max-h-48 overflow-auto">
                   {allPermissions.map((perm) => {
                     const checked = formPermissions.includes(perm);
-                    const isSuper = formRole === "Super Admin";
                     return (
                       <label key={perm} className="inline-flex items-center gap-2 cursor-pointer">
                         <input
@@ -890,7 +805,6 @@ const ManageAdministrators = () => {
                           checked={checked}
                           onChange={() => togglePermissionInForm(perm)}
                           className="h-4 w-4"
-                          disabled={isSuper} // only Super Admin locks the checkboxes
                         />
                         <span className="text-sm">{perm}</span>
                       </label>
